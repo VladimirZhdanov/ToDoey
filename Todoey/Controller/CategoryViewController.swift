@@ -4,36 +4,46 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
+import ChameleonFramework
 
-class CategoryViewController: UITableViewController {
+class CategoryViewController: SwipeTableViewController {
     
-   private var categories = [Category]()
-    //private var categories = ["1313", "qfqwf"]
+    private let realm = try! Realm()
     
-    private let context = (UIApplication.shared.delegate as! AppDelegate)
-        .persistentContainer
-        .viewContext
-
+    private var categories: Results<Category>?
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-
+        
+        tableView.rowHeight = 80.0
+        tableView.separatorStyle = .none
+        
         loadData()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        if let navBar = navigationController?.navigationBar {
+            navBar.backgroundColor = .white
+        }
     }
     
     //MARK:- TableView Data Source
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return categories.count
+        return categories?.count ?? 0
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
-        let category = categories[indexPath.row]
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
         
-        let cell = tableView.dequeueReusableCell(withIdentifier: K.categoryCell, for: indexPath)
-        cell.textLabel?.text = category.name
-        //cell.textLabel?.text = category
+        let category = categories?[indexPath.row]
+        
+        cell.backgroundColor = UIColor(hexString: (category?.backgroundColor) ?? K.whiteHex)
+        cell.textLabel?.textColor = ContrastColorOf(cell.backgroundColor!, returnFlat: false)
+        
+        cell.textLabel?.text = category?.name
         
         return cell
     }
@@ -41,7 +51,6 @@ class CategoryViewController: UITableViewController {
     //MARK:- TableView Delegate
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        //tableView.deselectRow(at: indexPath, animated: true)
         
         performSegue(withIdentifier: K.goToItems, sender: self)
     }
@@ -50,7 +59,7 @@ class CategoryViewController: UITableViewController {
         let destinationVC = segue.destination as! ToDoListViewController
         
         if let indexPath = tableView.indexPathForSelectedRow {
-            destinationVC.selectedCategory = categories[indexPath.row]
+            destinationVC.selectedCategory = categories?[indexPath.row]
         }
         
     }
@@ -58,7 +67,7 @@ class CategoryViewController: UITableViewController {
     //MARK:- Data Manipulation Methods
     
     @IBAction func addPressed(_ sender: UIBarButtonItem) {
-       
+        
         var result = UITextField()
         
         let aler = UIAlertController(title: "Add Category", message: "", preferredStyle: .alert)
@@ -67,12 +76,11 @@ class CategoryViewController: UITableViewController {
             
             if let safeName = result.text {
                 
-                let category = Category(context: self.context)
+                let category = Category()
                 category.name = safeName
+                category.backgroundColor = UIColor.randomFlat().hexValue()
                 
-                self.categories.append(category)
-                
-                self.saveData()
+                self.save(category)
                 
                 self.tableView.reloadData()
             }
@@ -88,24 +96,32 @@ class CategoryViewController: UITableViewController {
         present(aler, animated: true, completion: nil)
     }
     
-    private func saveData() {
+    private func save(_ category: Category) {
         
         do {
-            try context.save()
+            try realm.write {
+                realm.add(category)
+            }
         } catch {
             print("Error while saving data \(error)")
         }
     }
     
-    private func loadData(_ request: NSFetchRequest<Category> = Category.fetchRequest()) {
+    private func loadData() {
         
-        do {
-           categories = try context.fetch(request)
-        } catch {
-            print("Error while featching data: \(error)")
-        }
-        
+        categories = realm.objects(Category.self)
         tableView.reloadData()
-        
+    }
+    
+    override func updateModel(at indexPath: IndexPath) {
+        if let category = self.categories?[indexPath.row] {
+            do {
+                try self.realm.write {
+                    self.realm.delete(category)
+                }
+            } catch {
+                print("Error while update: \(error)")
+            }
+        }
     }
 }

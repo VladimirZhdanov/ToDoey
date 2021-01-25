@@ -4,58 +4,94 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
+import ChameleonFramework
 
-class ToDoListViewController: UITableViewController {
+class ToDoListViewController: SwipeTableViewController {
+    
+    @IBOutlet weak var searchBar: UISearchBar!
+    private let realm = try! Realm()
     
     var selectedCategory: Category? {
         didSet {
             loadData()
         }
-     }
+    }
     
-    var items = [Item]()
-    
-    let context = (UIApplication.shared.delegate as! AppDelegate)
-        .persistentContainer
-        .viewContext
+    var items: Results<Item>?
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        tableView.rowHeight = 80.0
+        tableView.separatorStyle = .none
+       
     }
     
-    //TableView DataSource methods
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        if let colorBack = UIColor(hexString: selectedCategory?.backgroundColor ?? K.whiteHex),
+           let navBar = navigationController?.navigationBar {
+            
+                navBar.backgroundColor = colorBack
+                navBar.tintColor = ContrastColorOf(UIColor(hexString: colorBack.hexValue())!, returnFlat: false)
+                searchBar.barTintColor = colorBack
+            navBar.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor : ContrastColorOf(colorBack, returnFlat: false)]
+            
+            // To change status bar color 
+//            let statusBar = UIView(frame: (UIApplication.shared.keyWindow?.windowScene?.statusBarManager?.statusBarFrame)!)
+//                    statusBar.backgroundColor = UIColor.black
+//            statusBar.tintColor = ContrastColorOf(UIColor.black, returnFlat: false)
+//                    UIApplication.shared.keyWindow?.addSubview(statusBar)
+        }
+        
+        navigationItem.title = selectedCategory?.name
+    }
+    
+    //MARK:- TableView DataSource methods
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return items.count
+        return items?.count ?? 0
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
-        let item = items[indexPath.row]
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
         
-        let cell = tableView.dequeueReusableCell(withIdentifier: K.toDoItemCell, for: indexPath)
-        cell.textLabel?.text = item.title
-        
-        cell.accessoryType = item.isDone ? .checkmark : .none
-        
+        if let item = items?[indexPath.row] {
+            
+            if let color = UIColor(hexString: selectedCategory?.backgroundColor ?? K.whiteHex)?.darken(byPercentage: CGFloat(Double(indexPath.row) / Double(items!.count))) {
+                cell.backgroundColor = color
+                cell.textLabel?.textColor = ContrastColorOf(color, returnFlat: false)
+            }
+            
+            cell.textLabel?.text = item.title
+            cell.accessoryType = item.isDone ? .checkmark : .none
+        }
         return cell
     }
     
+    //MARK:- TableView Delegate
+    
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         
-        items[indexPath.row].isDone = !items[indexPath.row].isDone
-        
-        
-        //        context.delete(items[indexPath.row])
-        //        items.remove(at: indexPath.row)
-        
-        saveData()
+        if let item = items?[indexPath.row] {
+            do {
+                try realm.write {
+                    
+                    item.isDone = !item.isDone
+                    self.tableView.reloadData()
+                }
+            } catch {
+                print("Error while update: \(error)")
+            }
+        }
         
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
-    // Add new item
+    //MARK:- Data Manipulation Methods
     
     @IBAction func addPressed(_ sender: UIBarButtonItem) {
         
@@ -65,16 +101,18 @@ class ToDoListViewController: UITableViewController {
         
         let action = UIAlertAction(title: "Add", style: .default) { (action) in
             
-            if let safeTitle = resultItem.text {
+            if let safeTitle = resultItem.text, let currentCategory = self.selectedCategory {
                 
-                let item = Item(context: self.context)
-                item.title = safeTitle
-                //item.isDone = false
-                item.parentCategory = self.selectedCategory
-                
-                self.items.append(item)
-                
-                self.saveData()
+                do {
+                    try self.realm.write {
+                        let item = Item()
+                        item.title = safeTitle
+                        item.created = Date()
+                        currentCategory.items.append(item)
+                    }
+                } catch {
+                    print("Error while saving data \(error)")
+                }
                 
                 self.tableView.reloadData()
             }
@@ -90,34 +128,23 @@ class ToDoListViewController: UITableViewController {
         present(aler, animated: true, completion: nil)
     }
     
-    private func saveData() {
+    private func loadData() {
         
-        do {
-            try context.save()
-        } catch {
-            print("Error while saving data \(error)")
-        }
-    }
-    
-    private func loadData(_ request: NSFetchRequest<Item> = Item.fetchRequest(), predicate: NSPredicate? = nil) {
-       // let request: NSFetchRequest<Item> = Item.fetchRequest()
-        
-        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
-        
-        if let additionalPredicate = predicate {
-            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
-        } else {
-            request.predicate = categoryPredicate
-        }
-        
-        do {
-            items = try context.fetch(request)
-        } catch {
-            print("Error while featching data: \(error)")
-        }
+        items = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
         
         tableView.reloadData()
-        
+    }
+    
+    override func updateModel(at indexPath: IndexPath) {
+        if let item = self.items?[indexPath.row] {
+            do {
+                try self.realm.write {
+                    self.realm.delete(item)
+                }
+            } catch {
+                print("Error while update: \(error)")
+            }
+        }
     }
     
     
@@ -128,15 +155,11 @@ class ToDoListViewController: UITableViewController {
 
 extension ToDoListViewController: UISearchBarDelegate  {
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-        let request: NSFetchRequest<Item> = Item.fetchRequest()
         
-        let predicate = NSPredicate(format: "title CONTAINS %@", searchBar.text!)
+        items = items?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "created", ascending: true)
         
-        let sortDescriptr = NSSortDescriptor(key: "title", ascending: true)
+        tableView.reloadData()
         
-        request.sortDescriptors = [sortDescriptr]
-        
-        loadData(request, predicate: predicate)
     }
     
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
@@ -151,4 +174,3 @@ extension ToDoListViewController: UISearchBarDelegate  {
         }
     }
 }
-
