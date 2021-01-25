@@ -5,9 +5,11 @@
 
 import UIKit
 import RealmSwift
+import ChameleonFramework
 
 class ToDoListViewController: SwipeTableViewController {
     
+    @IBOutlet weak var searchBar: UISearchBar!
     private let realm = try! Realm()
     
     var selectedCategory: Category? {
@@ -22,6 +24,27 @@ class ToDoListViewController: SwipeTableViewController {
         super.viewDidLoad()
         
         tableView.rowHeight = 80.0
+        tableView.separatorStyle = .none
+       
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        if let colorBack = UIColor(hexString: selectedCategory?.backgroundColor ?? K.whiteHex),
+           let navBar = navigationController?.navigationBar {
+            
+                navBar.backgroundColor = colorBack
+                navBar.tintColor = ContrastColorOf(UIColor(hexString: colorBack.hexValue())!, returnFlat: false)
+                searchBar.barTintColor = colorBack
+            navBar.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor : ContrastColorOf(colorBack, returnFlat: false)]
+            
+            // To change status bar color 
+//            let statusBar = UIView(frame: (UIApplication.shared.keyWindow?.windowScene?.statusBarManager?.statusBarFrame)!)
+//                    statusBar.backgroundColor = UIColor.black
+//            statusBar.tintColor = ContrastColorOf(UIColor.black, returnFlat: false)
+//                    UIApplication.shared.keyWindow?.addSubview(statusBar)
+        }
         
         navigationItem.title = selectedCategory?.name
     }
@@ -37,6 +60,11 @@ class ToDoListViewController: SwipeTableViewController {
         let cell = super.tableView(tableView, cellForRowAt: indexPath)
         
         if let item = items?[indexPath.row] {
+            
+            if let color = UIColor(hexString: selectedCategory?.backgroundColor ?? K.whiteHex)?.darken(byPercentage: CGFloat(Double(indexPath.row) / Double(items!.count))) {
+                cell.backgroundColor = color
+                cell.textLabel?.textColor = ContrastColorOf(color, returnFlat: false)
+            }
             
             cell.textLabel?.text = item.title
             cell.accessoryType = item.isDone ? .checkmark : .none
@@ -131,19 +159,18 @@ extension ToDoListViewController: UISearchBarDelegate  {
         items = items?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "created", ascending: true)
         
         tableView.reloadData()
-
+        
     }
-
+    
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
-
+        
         if searchBar.text?.count == 0 {
             loadData()
-
+            
             DispatchQueue.main.async {
-
+                
                 searchBar.resignFirstResponder()
             }
         }
     }
 }
-
