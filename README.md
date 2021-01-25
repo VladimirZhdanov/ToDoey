@@ -12,8 +12,8 @@ You will need a mac computer, xcode app and as optional physical iPhone.
 
 
 <div align="left">
-    <img src="https://github.com/VladimirZhdanov/H4X0R_News/blob/main/images/IMG_0357.PNG" width="180px"</img>
-        <img src="https://github.com/VladimirZhdanov/H4X0R_News/blob/main/images/IMG_0358.PNG" width="180px"</img>
+    <img src="https://github.com/VladimirZhdanov/ToDoey/blob/main/images/IMG_0428.PNG" width="180px"</img>
+        <img src="https://github.com/VladimirZhdanov/ToDoey/blob/main/images/IMG_0429.PNG" width="180px"</img>
 </div>
 
 ## A few words
